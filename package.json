@@ -1,0 +1,22 @@
+{
+  "name": "tijera",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Corta vídeos en trozos para estados de WhatsApp",
+  "scripts": {
+    "vendor": "node scripts/vendor.mjs",
+    "sync": "npm run vendor && npx cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/filesystem": "^7.0.0",
+    "@capacitor/share": "^7.0.0",
+    "@ffmpeg/core": "0.12.6",
+    "@ffmpeg/ffmpeg": "0.12.10"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^7.0.0"
+  }
+}

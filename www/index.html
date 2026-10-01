@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tijera — cortar vídeo en trozos para estados</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bench:#1D2B2B;--bench-2:#233434;--paper:#EFE7D6;--paper-dim:#B9B0A0;
+    --cut:#E4572E;--line:rgba(239,231,214,.16);--radius:3px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:var(--bench);color:var(--paper);
+    font-family:Archivo,"Helvetica Neue",Helvetica,Arial,sans-serif;
+    font-variant-numeric:tabular-nums;line-height:1.5;
+    -webkit-font-smoothing:antialiased;padding:28px 20px 80px;
+  }
+  .wrap{max-width:720px;margin:0 auto}
+  header h1{font-size:clamp(2rem,7vw,3rem);font-weight:800;letter-spacing:-.03em;line-height:1.02;margin:0 0 10px}
+  header p{margin:0 0 28px;color:var(--paper-dim);max-width:46ch}
+
+  .drop{border:2px dashed var(--line);border-radius:var(--radius);padding:44px 24px;text-align:center;cursor:pointer;background:var(--bench-2);transition:border-color .15s,background .15s}
+  .drop:hover,.drop:focus-visible{border-color:var(--cut);outline:none}
+  .drop.over{border-color:var(--cut);background:#2A3B39}
+  .drop strong{display:block;font-size:1.15rem;font-weight:600}
+  .drop span{color:var(--paper-dim);font-size:.9rem}
+
+  .panel{margin-top:26px;display:none}
+  .panel.show{display:block}
+  .filename{display:flex;justify-content:space-between;gap:16px;align-items:baseline;border-bottom:1px solid var(--line);padding-bottom:8px;margin-bottom:22px}
+  .filename b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .filename span{color:var(--paper-dim);font-size:.85rem;white-space:nowrap}
+
+  .strip{display:flex;height:56px;margin:0 0 8px;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--bench-2)}
+  .strip i{flex:1 1 0;display:grid;place-items:center;font-style:normal;font-size:.8rem;color:var(--paper-dim);border-right:2px dashed var(--cut)}
+  .strip i:last-child{border-right:none}
+  .strip i.short{background:repeating-linear-gradient(135deg,transparent,transparent 6px,rgba(239,231,214,.07) 6px,rgba(239,231,214,.07) 12px)}
+  .strip-note{color:var(--paper-dim);font-size:.85rem;margin:0 0 24px}
+
+  fieldset{border:none;padding:0;margin:0 0 22px}
+  legend{font-weight:600;margin-bottom:10px;padding:0}
+  .segs{display:flex;flex-wrap:wrap;gap:8px}
+  .segs button{font:inherit;font-weight:500;color:var(--paper);background:transparent;border:1px solid var(--line);border-radius:var(--radius);padding:8px 14px;cursor:pointer;transition:all .12s}
+  .segs button:hover{border-color:var(--paper-dim)}
+  .segs button[aria-pressed=true]{background:var(--paper);color:var(--bench);border-color:var(--paper)}
+  .segs input{font:inherit;width:110px;color:var(--paper);background:transparent;border:1px solid var(--line);border-radius:var(--radius);padding:8px 10px}
+  .segs input:focus-visible{outline:2px solid var(--cut);outline-offset:1px}
+
+  label.check{display:flex;gap:10px;align-items:flex-start;cursor:pointer;margin-bottom:10px}
+  label.check input{margin:5px 0 0;accent-color:var(--cut);flex:none}
+  label.check em{display:block;font-style:normal;color:var(--paper-dim);font-size:.85rem;line-height:1.4}
+
+  .go{font:inherit;font-size:1.05rem;font-weight:600;width:100%;background:var(--cut);color:#fff;border:none;border-radius:var(--radius);padding:15px;cursor:pointer}
+  .go:hover{background:#F06239}
+  .go:disabled{background:#3B4B4A;color:var(--paper-dim);cursor:default}
+
+  .progress{display:none;margin-top:26px}
+  .progress.show{display:block}
+  .phase{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:8px}
+  .phase b{font-weight:600;font-size:.95rem}
+  .phase span{color:var(--paper-dim);font-size:.85rem;white-space:nowrap}
+  .bar{height:6px;background:var(--bench-2);border-radius:99px;overflow:hidden}
+  .bar div{height:100%;width:0;background:var(--cut);transition:width .3s}
+  .bar.idle div{width:35%;animation:slide 1.4s ease-in-out infinite}
+  @keyframes slide{0%{margin-left:-35%}100%{margin-left:100%}}
+  .steps{display:flex;gap:6px;margin-top:12px;font-size:.75rem;color:var(--paper-dim);flex-wrap:wrap}
+  .steps b{font-weight:400;padding:2px 0;opacity:.4}
+  .steps b.done{opacity:1}
+  .steps b.now{opacity:1;color:var(--cut);font-weight:600}
+  .hint{color:var(--paper-dim);font-size:.82rem;margin:10px 0 0}
+  .log{max-height:0;overflow:auto;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.72rem;color:var(--paper-dim);white-space:pre-wrap;transition:max-height .2s;margin:0}
+  .log.show{max-height:140px;margin-top:12px}
+  .toggle-log{font:inherit;font-size:.8rem;color:var(--paper-dim);background:none;border:none;padding:8px 0 0;cursor:pointer;text-decoration:underline}
+
+  .results{margin-top:34px}
+  .results h2{font-size:1.4rem;font-weight:800;letter-spacing:-.02em;margin:0 0 4px}
+  .results > p{color:var(--paper-dim);margin:0 0 20px;font-size:.9rem}
+  .chunk{display:flex;gap:16px;padding:16px 0;border-top:1px dashed var(--line);align-items:center}
+  .chunk:last-of-type{border-bottom:1px dashed var(--line)}
+  .n{font-size:1.6rem;font-weight:800;color:var(--paper-dim);min-width:1.6em;text-align:right;letter-spacing:-.03em}
+  .chunk video{width:104px;height:72px;background:#000;border-radius:var(--radius);object-fit:cover;flex:none}
+  .meta{flex:1;min-width:0;font-size:.88rem}
+  .meta b{display:block;font-weight:600;font-size:.98rem}
+  .meta span{color:var(--paper-dim)}
+  .meta .warn{color:var(--cut);display:block}
+  .dl{font:inherit;font-weight:500;font-size:.88rem;text-decoration:none;flex:none;color:var(--paper);border:1px solid var(--line);border-radius:var(--radius);padding:9px 13px}
+  .dl:hover{border-color:var(--paper)}
+  .dl[disabled]{opacity:.5}
+  button.dl{background:transparent;cursor:pointer}
+  .acts{display:flex;flex-direction:column;gap:6px;flex:none}
+  .all{margin-top:20px}
+
+  .error{border-left:3px solid var(--cut);padding:12px 14px;background:var(--bench-2);margin-top:20px;font-size:.9rem;display:none}
+  .error.show{display:block}
+  footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--line);color:var(--paper-dim);font-size:.82rem}
+  @media (max-width:520px){.chunk video{width:76px;height:54px}.n{font-size:1.2rem}}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Tijera</h1>
+    <p>Corta un vídeo largo en trozos del tamaño que admiten los estados de WhatsApp. Todo pasa dentro del navegador: el vídeo no se sube a ningún sitio.</p>
+  </header>
+
+  <div class="drop" id="drop" tabindex="0" role="button" aria-label="Elegir vídeo">
+    <strong>Suelta un vídeo aquí</strong>
+    <span>o pulsa para elegirlo — MP4, MOV, MKV, WebM</span>
+  </div>
+  <input type="file" id="file" accept="video/*" hidden>
+
+  <section class="panel" id="panel">
+    <div class="filename"><b id="fname"></b><span id="fmeta"></span></div>
+
+    <div class="strip" id="strip"></div>
+    <p class="strip-note" id="stripNote"></p>
+
+    <fieldset>
+      <legend>Duración de cada trozo</legend>
+      <div class="segs" id="segs">
+        <button type="button" data-s="30" aria-pressed="true">30 s</button>
+        <button type="button" data-s="60">60 s</button>
+        <button type="button" data-s="90">90 s</button>
+        <input type="number" id="custom" min="3" max="900" placeholder="otra…" aria-label="Duración personalizada en segundos">
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Cómo cortar</legend>
+      <label class="check">
+        <input type="checkbox" id="precise">
+        <span>Cortes exactos<em>Recodifica el vídeo para que cada trozo dure justo lo pedido. Es bastante más lento. Sin marcar, cada trozo termina en el último fotograma clave que cabe, así que dura un poco menos, nunca más.</em></span>
+      </label>
+      <label class="check">
+        <input type="checkbox" id="shrink" checked>
+        <span>Bajar a 720p<em>Reduce el peso de cada trozo. Solo se aplica con los cortes exactos, porque hace falta recodificar.</em></span>
+      </label>
+    </fieldset>
+
+    <button class="go" id="go">Cortar en trozos</button>
+  </section>
+
+  <div class="progress" id="progress">
+    <div class="phase"><b id="phaseName">Preparando</b><span id="phaseInfo"></span></div>
+    <div class="bar" id="bar"><div id="barFill"></div></div>
+    <div class="steps" id="steps"></div>
+    <p class="hint" id="hint"></p>
+    <button class="toggle-log" id="toggleLog" type="button">Ver detalle técnico</button>
+    <pre class="log" id="log"></pre>
+  </div>
+
+  <div class="error" id="error"></div>
+
+  <section class="results" id="results" hidden>
+    <h2>Listo</h2>
+    <p id="resultsNote"></p>
+    <div id="list"></div>
+    <button class="go all" id="dlAll">Descargar todos</button>
+  </section>
+
+  <footer id="foot">Publica los trozos en orden, del 1 al último. El estado de WhatsApp admite unos 30 s por vídeo y hasta 16 MB.</footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+/* ------------------------------------------------------------------ */
+/*  Progreso                                                           */
+/* ------------------------------------------------------------------ */
+const PHASES = [
+  { key:'motor',    label:'Descargando el motor', weight:30 },
+  { key:'arranque', label:'Arrancando',           weight:8  },
+  { key:'lectura',  label:'Leyendo el vídeo',     weight:7  },
+  { key:'corte',    label:'Cortando',             weight:50 },
+  { key:'recogida', label:'Preparando los trozos',weight:5  },
+];
+let phaseIdx = 0, started = 0, tick = null;
+let progBase = 0, progSpan = 1;   // porción de la fase que ocupa el exec actual
+
+function drawSteps(){
+  $('steps').innerHTML = PHASES.map((p,i) =>
+    `<b class="${i < phaseIdx ? 'done' : i === phaseIdx ? 'now' : ''}">${p.label}</b>`
+  ).join('<b class="done">·</b>');
+}
+function setPhase(key, label){
+  phaseIdx = PHASES.findIndex(p => p.key === key);
+  $('phaseName').textContent = label || PHASES[phaseIdx].label;
+  $('bar').classList.remove('idle');
+  drawSteps(); setFraction(0);
+}
+function setFraction(f){
+  f = Math.min(1, Math.max(0, f || 0));
+  const before = PHASES.slice(0, phaseIdx).reduce((a,p) => a + p.weight, 0);
+  $('barFill').style.width = (before + PHASES[phaseIdx].weight * f).toFixed(1) + '%';
+}
+function setIndeterminate(){ $('bar').classList.add('idle'); }
+function setInfo(t){ $('phaseInfo').textContent = t; }
+function setBase(t){ $('phaseInfo').dataset.base = t; }
+function setHint(t){ $('hint').textContent = t || ''; }
+function startClock(){
+  started = Date.now();
+  clearInterval(tick);
+  tick = setInterval(() => {
+    const s = Math.round((Date.now() - started) / 1000);
+    const base = $('phaseInfo').dataset.base || '';
+    setInfo((base ? base + ' · ' : '') + (s < 60 ? s + ' s' : Math.floor(s/60) + ':' + String(s%60).padStart(2,'0')));
+  }, 1000);
+}
+function stopClock(){ clearInterval(tick); tick = null; }
+const paint = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 30)));
+
+function pushLog(m){
+  const el = $('log');
+  el.textContent = (el.textContent + '\n' + m).split('\n').slice(-140).join('\n');
+  el.scrollTop = el.scrollHeight;
+}
+$('toggleLog').onclick = () => {
+  const on = $('log').classList.toggle('show');
+  $('toggleLog').textContent = on ? 'Ocultar detalle técnico' : 'Ver detalle técnico';
+};
+function showError(html){ $('error').innerHTML = html; $('error').classList.add('show'); }
+function clearError(){ $('error').classList.remove('show'); }
+
+/* ------------------------------------------------------------------ */
+/*  Descarga con progreso y corte por inactividad                      */
+/* ------------------------------------------------------------------ */
+const CDNS = ['https://cdn.jsdelivr.net/npm', 'https://unpkg.com'];
+const LOCAL = './ffmpeg';           // si dejas aquí los archivos, se usan estos
+const STALL_MS = 20000;
+const mbs = b => (b / 1048576).toFixed(1);
+
+async function getBytes(url, onProgress){
+  const ctrl = new AbortController();
+  let timer;
+  const bump = () => { clearTimeout(timer); timer = setTimeout(() => ctrl.abort(), STALL_MS); };
+  bump();
+  try {
+    const r = await fetch(url, { signal: ctrl.signal });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    if (!r.body || !r.body.getReader){
+      const buf = new Uint8Array(await r.arrayBuffer());
+      clearTimeout(timer); return buf;
+    }
+    const total = +r.headers.get('content-length') || 0;
+    const reader = r.body.getReader();
+    const parts = []; let got = 0;
+    for (;;){
+      const { done, value } = await reader.read();
+      if (done) break;
+      parts.push(value); got += value.length; bump();
+      if (onProgress) onProgress(got, total);
+    }
+    clearTimeout(timer);
+    const out = new Uint8Array(got); let o = 0;
+    for (const p of parts){ out.set(p, o); o += p.length; }
+    return out;
+  } catch (e){
+    clearTimeout(timer);
+    throw e.name === 'AbortError' ? new Error('la descarga se quedó parada más de 20 s') : e;
+  }
+}
+const blobURL = (bytes, type) => URL.createObjectURL(new Blob([bytes], { type }));
+
+function runScript(url){
+  return new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = url;
+    s.onload = res;
+    s.onerror = () => rej(new Error('no se pudo ejecutar el script'));
+    document.head.appendChild(s);
+  });
+}
+const race = (p, ms, msg) => Promise.race([
+  p, new Promise((_, rej) => setTimeout(() => rej(new Error(msg)), ms)),
+]);
+
+/* ------------------------------------------------------------------ */
+/*  Motor: worker si se puede, hilo principal si no                    */
+/* ------------------------------------------------------------------ */
+let engine = null;
+
+async function resolveBase(){
+  try {
+    const r = await fetch(LOCAL + '/ok.txt', { cache: 'no-store' });
+    if (r.ok) return { kind:'local', core: LOCAL, lib: LOCAL };
+  } catch (e){ /* sin copia local */ }
+  for (const cdn of CDNS){
+    try {
+      setInfo('probando ' + new URL(cdn).hostname);
+      const r = await fetch(cdn + '/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js', { method:'HEAD' });
+      if (r.ok) return { kind:'cdn', core: cdn + '/@ffmpeg/core@0.12.6/dist/umd', lib: cdn + '/@ffmpeg/ffmpeg@0.12.10/dist/umd' };
+    } catch (e){ /* siguiente */ }
+  }
+  throw new Error('no se pudo alcanzar ningún CDN');
+}
+
+async function bootEngine(){
+  if (engine) return engine;
+
+  setPhase('motor'); setBase(''); setInfo('');
+  const src = await resolveBase();
+
+  const coreJS = await getBytes(src.core + '/ffmpeg-core.js');
+  const wasm = await getBytes(src.core + '/ffmpeg-core.wasm', (got, total) => {
+    setFraction(total ? got / total : 0);
+    setInfo(mbs(got) + (total ? ' / ' + mbs(total) : '') + ' MB');
+  });
+  setFraction(1);
+
+  const coreURL = blobURL(coreJS, 'text/javascript');
+  const wasmURL = blobURL(wasm, 'application/wasm');
+
+  setPhase('arranque'); setIndeterminate(); setBase(''); setInfo('');
+
+  // A) modo worker: no bloquea la interfaz y da progreso real
+  try {
+    engine = await race(bootWorker(src, coreURL, wasmURL), 25000, 'el worker no respondió');
+    setHint('');
+    return engine;
+  } catch (e){
+    pushLog('[modo worker descartado] ' + e.message);
+  }
+
+  // B) modo compatible: ffmpeg corre en el hilo principal
+  setPhase('arranque', 'Arrancando en modo compatible');
+  setIndeterminate();
+  engine = await race(bootMainThread(coreURL, wasmURL), 40000, 'el motor no terminó de arrancar');
+  setHint('Modo compatible: la página se quedará quieta mientras corta. Es normal, no la cierres.');
+  return engine;
+}
+
+async function bootWorker(src, coreURL, wasmURL){
+  if (typeof Worker === 'undefined') throw new Error('sin soporte de Worker');
+  await runScript(blobURL(await getBytes(src.lib + '/ffmpeg.js'), 'text/javascript'));
+  if (!window.FFmpegWASM) throw new Error('la librería no se registró');
+
+  let workerURL = null;
+  for (const n of ['814.ffmpeg.js', '817.ffmpeg.js', '813.ffmpeg.js', 'ffmpeg.worker.js']){
+    try {
+      const b = await getBytes(src.lib + '/' + n);
+      const txt = new TextDecoder().decode(b.slice(0, 400));
+      if (b.length > 200 && !/^\s*</.test(txt)){ workerURL = blobURL(b, 'text/javascript'); break; }
+    } catch (e){ /* siguiente candidato */ }
+  }
+  if (!workerURL) throw new Error('no se encontró el worker');
+
+  const ff = new window.FFmpegWASM.FFmpeg();
+  ff.on('log', ({ message }) => pushLog(message));
+  ff.on('progress', ({ progress }) => {
+    if (PHASES[phaseIdx] && PHASES[phaseIdx].key === 'corte' && progress > 0 && progress <= 1){
+      $('bar').classList.remove('idle');
+      setFraction(progBase + progress * progSpan);
+    }
+  });
+  await ff.load({ coreURL, wasmURL, classWorkerURL: workerURL });
+
+  return {
+    mode: 'worker',
+    writeFile: (n, d) => ff.writeFile(n, d),
+    readFile: n => ff.readFile(n),
+    deleteFile: n => ff.deleteFile(n),
+    listDir: p => ff.listDir(p),
+    exec: a => ff.exec(a),
+  };
+}
+
+async function bootMainThread(coreURL, wasmURL){
+  if (!window.createFFmpegCore) await runScript(coreURL);
+  if (!window.createFFmpegCore) throw new Error('el core no expuso createFFmpegCore');
+
+  // El core ignora cualquier locateFile que le pases: usa el suyo, que lee las
+  // rutas de un fragmento base64 pegado al final de mainScriptUrlOrBlob.
+  const meta = btoa(JSON.stringify({ wasmURL, workerURL: '' }));
+  const core = await window.createFFmpegCore({
+    mainScriptUrlOrBlob: coreURL + '#' + meta,
+  });
+  try { core.setLogger(({ message }) => pushLog(message)); } catch (e){}
+  try { core.setTimeout(-1); } catch (e){}
+
+  const FS = core.FS;
+  return {
+    mode: 'main',
+    writeFile: async (n, d) => FS.writeFile(n, d),
+    readFile: async n => FS.readFile(n),
+    deleteFile: async n => { try { FS.unlink(n); } catch (e){} },
+    listDir: async (p) => FS.readdir(p)
+      .filter(n => n !== '.' && n !== '..')
+      .map(n => {
+        let isDir = false;
+        try { isDir = FS.isDir(FS.stat((p === '/' ? '/' : p + '/') + n).mode); } catch (e){}
+        return { name: n, isDir };
+      }),
+    exec: async (args) => {
+      core.exec(...args);
+      const ret = core.ret;
+      try { core.reset(); } catch (e){}
+      return ret;
+    },
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Android (Capacitor): guardar en el dispositivo y compartir         */
+/* ------------------------------------------------------------------ */
+const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+
+function blobToBase64(blob){
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(String(r.result).split(',')[1]);
+    r.onerror = () => rej(new Error('no se pudo leer el trozo'));
+    r.readAsDataURL(blob);
+  });
+}
+
+async function nativeWrite(blob, name, directory, folder){
+  const { Filesystem } = window.Capacitor.Plugins;
+  const path = (folder ? folder + '/' : '') + name;
+  const data = await blobToBase64(blob);
+  await Filesystem.writeFile({ path, data, directory, recursive: true });
+  const { uri } = await Filesystem.getUri({ path, directory });
+  return uri;
+}
+
+async function nativeShare(blob, name){
+  const uri = await nativeWrite(blob, name, 'CACHE', 'compartir');
+  await window.Capacitor.Plugins.Share.share({ title: name, files: [uri] });
+}
+
+async function nativeSave(blob, name){
+  await nativeWrite(blob, name, 'DOCUMENTS', 'Tijera');
+  return 'Documentos/Tijera';
+}
+
+function flash(btn, text){
+  const prev = btn.textContent;
+  btn.textContent = text;
+  setTimeout(() => { btn.textContent = prev; }, 2200);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Fotogramas clave del MP4 (tabla stss) para cortar sin pasarse      */
+/* ------------------------------------------------------------------ */
+function mp4Keyframes(u8){
+  const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  const CONT = new Set(['moov','trak','mdia','minf','stbl','edts','udta']);
+  const str = o => String.fromCharCode(dv.getUint8(o),dv.getUint8(o+1),dv.getUint8(o+2),dv.getUint8(o+3));
+  let found = null;
+  function walk(off, end, ctx){
+    while (off + 8 <= end){
+      let size = dv.getUint32(off), head = 8;
+      const type = str(off + 4);
+      if (size === 1){ size = dv.getUint32(off+8)*4294967296 + dv.getUint32(off+12); head = 16; }
+      else if (size === 0) size = end - off;
+      if (size < head || off + size > end) return;
+      const body = off + head, bEnd = off + size;
+      if (type === 'trak'){
+        const c = {}; walk(body, bEnd, c);
+        if (c.handler === 'vide' && c.stss && c.stts && c.timescale) found = c;
+      } else if (CONT.has(type)) walk(body, bEnd, ctx);
+      else if (type === 'hdlr') ctx.handler = str(body + 8);
+      else if (type === 'mdhd') ctx.timescale = dv.getUint8(body) === 1 ? dv.getUint32(body+20) : dv.getUint32(body+12);
+      else if (type === 'stts'){
+        const n = dv.getUint32(body+4), a = [];
+        for (let i=0;i<n;i++) a.push([dv.getUint32(body+8+i*8), dv.getUint32(body+12+i*8)]);
+        ctx.stts = a;
+      } else if (type === 'stss'){
+        const n = dv.getUint32(body+4), a = new Uint32Array(n);
+        for (let i=0;i<n;i++) a[i] = dv.getUint32(body+8+i*4);
+        ctx.stss = a;
+      }
+      off = bEnd;
+    }
+  }
+  walk(0, dv.byteLength, {});
+  if (!found) return null;
+  const dts = []; let t = 0;
+  for (const [count, delta] of found.stts) for (let i=0;i<count;i++){ dts.push(t); t += delta; }
+  const out = [];
+  for (const s of found.stss){ const d = dts[s-1]; if (d !== undefined) out.push(d / found.timescale); }
+  return out.length > 1 ? out : null;
+}
+
+function cutPoints(kf, dur, seg){
+  const pts = [];
+  let cur = 0;
+  while (dur - cur > seg + 0.05){
+    const target = cur + seg;
+    let pick = -1;
+    for (const k of kf) if (k > cur + 0.5 && k <= target + 0.001) pick = k;
+    if (pick < 0){ pick = kf.find(k => k > cur + 0.5); if (pick === undefined) break; }
+    pts.push(pick); cur = pick;
+  }
+  return pts;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Archivo                                                            */
+/* ------------------------------------------------------------------ */
+let file = null, duration = 0, seg = 30, urls = [];
+const fmt = s => { s = Math.max(0, Math.round(s)); return Math.floor(s/60) + ':' + String(s%60).padStart(2,'0'); };
+const mb = b => mbs(b) + ' MB';
+
+function videoDuration(src){
+  return new Promise(res => {
+    const v = document.createElement('video');
+    v.preload = 'metadata';
+    v.onloadedmetadata = () => res(v.duration);
+    v.onerror = () => res(0);
+    v.src = src;
+  });
+}
+
+const drop = $('drop');
+drop.onclick = () => $('file').click();
+drop.onkeydown = e => { if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); $('file').click(); } };
+['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) accept(f); });
+$('file').onchange = e => { if (e.target.files[0]) accept(e.target.files[0]); };
+
+async function accept(f){
+  clearError();
+  if (!f.type.startsWith('video/') && !/\.(mp4|mov|mkv|webm|avi|m4v)$/i.test(f.name)){
+    return showError('Ese archivo no parece un vídeo. Prueba con un MP4, MOV, MKV o WebM.');
+  }
+  file = f;
+  const url = URL.createObjectURL(f);
+  duration = await videoDuration(url);
+  URL.revokeObjectURL(url);
+  $('fname').textContent = f.name;
+  $('fmeta').textContent = (duration ? fmt(duration) + ' · ' : '') + mb(f.size);
+  $('panel').classList.add('show');
+  $('results').hidden = true;
+  drawStrip();
+  if (f.size > 900 * 1048576){
+    showError('El archivo pasa de 900 MB. El navegador puede quedarse sin memoria; si falla, córtalo antes en dos mitades.');
+  }
+}
+
+function drawStrip(){
+  const strip = $('strip');
+  strip.innerHTML = '';
+  if (!duration){ $('stripNote').textContent = 'No se ha podido leer la duración; se cortará igualmente.'; return; }
+  const n = Math.max(1, Math.ceil(duration / seg));
+  const last = duration - (n - 1) * seg;
+  const shown = Math.min(n, 40);
+  for (let i = 0; i < shown; i++){
+    const el = document.createElement('i');
+    if (i === n - 1 && last < seg * 0.6) el.className = 'short';
+    if (shown <= 12) el.textContent = i + 1;
+    strip.appendChild(el);
+  }
+  $('stripNote').textContent =
+    `${n} ${n === 1 ? 'trozo' : 'trozos'} de ${seg} s` +
+    (last < seg ? ` (el último, ${fmt(last)})` : '') +
+    (shown < n ? ' — la tira muestra solo los primeros 40' : '');
+}
+
+$('segs').addEventListener('click', e => {
+  const b = e.target.closest('button[data-s]');
+  if (!b) return;
+  seg = +b.dataset.s; $('custom').value = '';
+  [...$('segs').querySelectorAll('button')].forEach(x => x.setAttribute('aria-pressed', x === b));
+  drawStrip();
+});
+$('custom').oninput = e => {
+  const v = +e.target.value;
+  if (v >= 3){
+    seg = v;
+    [...$('segs').querySelectorAll('button')].forEach(x => x.setAttribute('aria-pressed', false));
+    drawStrip();
+  }
+};
+
+/* ------------------------------------------------------------------ */
+/*  Corte                                                              */
+/* ------------------------------------------------------------------ */
+$('go').onclick = run;
+
+function chunkArgs(i, inName, shrink){
+  const a = ['-ss', String(i * seg), '-i', inName, '-t', String(seg), '-map', '0:v:0', '-map', '0:a:0?'];
+  if (shrink) a.push('-vf', "scale='if(gt(iw,ih),-2,min(720,iw))':'if(gt(iw,ih),min(720,ih),-2)'");
+  a.push('-c:v','libx264','-preset','ultrafast','-crf','26',
+         '-c:a','aac','-b:a','128k','-movflags','+faststart',
+         `trozo_${String(i).padStart(3, '0')}.mp4`);
+  return a;
+}
+
+async function run(){
+  if (!file) return;
+  clearError();
+  $('go').disabled = true;
+  $('results').hidden = true;
+  $('progress').classList.add('show');
+  setHint('');
+  urls.forEach(u => URL.revokeObjectURL(u));
+  urls = [];
+  startClock();
+
+  const precise = $('precise').checked;
+  const shrink = $('shrink').checked;
+  const inName = 'entrada' + (file.name.match(/\.[a-z0-9]+$/i) || ['.mp4'])[0];
+
+  try {
+    const eng = await bootEngine();
+
+    setPhase('lectura'); setIndeterminate(); setBase(mb(file.size));
+    await paint();
+    let bytes = new Uint8Array(await file.arrayBuffer());
+
+    let cuts = null;
+    if (!precise && duration){
+      try {
+        const kf = mp4Keyframes(bytes);
+        if (kf){
+          cuts = cutPoints(kf, duration, seg);
+          pushLog(`[cortes] ${kf.length} fotogramas clave, ${cuts.length + 1} trozos`);
+        }
+      } catch (e){ pushLog('[cortes] no se pudieron leer los fotogramas clave: ' + e.message); }
+    }
+
+    await eng.writeFile(inName, bytes);
+    bytes = null;
+
+    const args = ['-i', inName, '-map', '0:v:0', '-map', '0:a:0?', '-c', 'copy', '-f', 'segment'];
+    if (cuts && cuts.length) args.push('-segment_times', cuts.map(t => (t - 0.05).toFixed(3)).join(','));
+    else args.push('-segment_time', String(seg));
+    args.push('-segment_format','mp4','-reset_timestamps','1','-segment_time_delta','0.05','trozo_%03d.mp4');
+
+    setPhase('corte', precise ? 'Recodificando y cortando' : 'Cortando');
+    setIndeterminate(); setBase('');
+    if (eng.mode === 'main'){
+      setHint('Modo compatible: la página se queda quieta mientras trabaja en cada trozo. Es normal, no la cierres.');
+    }
+
+    if (precise){
+      // Un pase por trozo: así se puede pintar el avance entre uno y otro.
+      const total = Math.max(1, Math.ceil(duration / seg));
+      const t0 = Date.now();
+      for (let i = 0; i < total; i++){
+        progBase = i / total; progSpan = 1 / total;
+        setFraction(progBase);
+        let label = `trozo ${i + 1} de ${total}`;
+        if (i > 0){
+          const left = Math.round((Date.now() - t0) / i * (total - i) / 1000);
+          label += ` · quedan ~${fmt(left)}`;
+        }
+        setBase(label); setInfo(label);
+        await paint();
+        const code = await eng.exec(chunkArgs(i, inName, shrink));
+        if (code !== 0) throw new Error('ffmpeg devolvió el código ' + code + ' en el trozo ' + (i + 1));
+      }
+    } else {
+      progBase = 0; progSpan = 1;
+      await paint();
+      const code = await eng.exec(args);
+      if (code !== 0) throw new Error('ffmpeg devolvió el código ' + code);
+    }
+
+    setPhase('recogida'); setHint('');
+    const entries = (await eng.listDir('/'))
+      .filter(f => !f.isDir && /^trozo_\d+\.mp4$/.test(f.name))
+      .map(f => f.name).sort();
+    if (!entries.length) throw new Error('no se generó ningún trozo');
+
+    const chunks = [];
+    for (let i = 0; i < entries.length; i++){
+      setBase(`${i + 1} de ${entries.length}`);
+      setFraction((i + 1) / entries.length);
+      const bytes = await eng.readFile(entries[i]);
+      const blob = new Blob([bytes], { type: 'video/mp4' });
+      const url = URL.createObjectURL(blob);
+      urls.push(url);
+      chunks.push({ blob, url, dur: await videoDuration(url) });
+      await eng.deleteFile(entries[i]);
+    }
+    await eng.deleteFile(inName);
+
+    stopClock();
+    $('bar').classList.remove('idle');
+    $('barFill').style.width = '100%';
+    $('phaseName').textContent = 'Terminado';
+    setInfo(`${chunks.length} trozos en ${Math.round((Date.now() - started)/1000)} s`);
+    phaseIdx = PHASES.length; drawSteps();
+    render(chunks);
+  } catch (err){
+    console.error(err);
+    stopClock();
+    $('progress').classList.remove('show');
+    const msg = String(err.message || err);
+    let tip;
+    if (/CDN|worker|arrancar|parada|fetch|network|HTTP/i.test(msg)){
+      tip = 'No se ha podido traer el motor de vídeo (unos 32 MB). Prueba con otra conexión, o deja los archivos <code>ffmpeg-core.js</code> y <code>ffmpeg-core.wasm</code> en una carpeta <code>ffmpeg/</code> junto a este HTML y se usarán esos.';
+    } else if (/memory|allocat|RangeError/i.test(msg)){
+      tip = 'El navegador se ha quedado sin memoria. Prueba con un vídeo más corto o desde un ordenador.';
+    } else if (!precise){
+      tip = 'Si el vídeo tiene un códec que no encaja en un MP4, marca «Cortes exactos» y vuelve a intentarlo: eso recodifica y suele resolverlo.';
+    }
+    showError('<b>No se ha podido cortar.</b><br>' + msg + (tip ? '<br><br>' + tip : ''));
+  } finally {
+    $('go').disabled = false;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Resultados                                                         */
+/* ------------------------------------------------------------------ */
+function render(chunks){
+  const list = $('list');
+  list.innerHTML = '';
+  let over = 0, heavy = 0, t = 0;
+
+  chunks.forEach((c, i) => {
+    const long = c.dur > seg + 0.6;
+    const big = c.blob.size > 16 * 1048576;
+    if (long) over++;
+    if (big) heavy++;
+    const row = document.createElement('div');
+    row.className = 'chunk';
+    row.innerHTML = `
+      <div class="n">${i + 1}</div>
+      <video src="${c.url}" muted playsinline preload="metadata"></video>
+      <div class="meta">
+        <b>${fmt(t)} → ${fmt(t + c.dur)}</b>
+        <span>${c.dur.toFixed(1)} s · ${mb(c.blob.size)}</span>
+        ${long ? '<span class="warn">Se pasa de ' + seg + ' s: WhatsApp lo recortará</span>' : ''}
+        ${big ? '<span class="warn">Más de 16 MB: puede que no suba</span>' : ''}
+      </div>
+      ${NATIVE
+        ? '<div class="acts"><button class="dl" data-act="share">Compartir</button><button class="dl" data-act="save">Guardar</button></div>'
+        : `<a class="dl" href="${c.url}" download="${nameFor(i + 1)}">Descargar</a>`}`;
+    list.appendChild(row);
+    row.querySelector('video').onclick = e => e.target.paused ? e.target.play() : e.target.pause();
+    if (NATIVE){
+      row.querySelectorAll('[data-act]').forEach(btn => {
+        btn.onclick = async () => {
+          const name = nameFor(i + 1);
+          btn.disabled = true;
+          try {
+            if (btn.dataset.act === 'share'){ await nativeShare(c.blob, name); }
+            else { flash(btn, 'en ' + await nativeSave(c.blob, name)); }
+          } catch (e){ flash(btn, 'error'); console.error(e); }
+          btn.disabled = false;
+        };
+      });
+    }
+    t += c.dur;
+  });
+
+  const notes = [`${chunks.length} ${chunks.length === 1 ? 'trozo' : 'trozos'} en MP4.`];
+  if (over) notes.push(`${over} se pasan de ${seg} s: ese tramo no tenía ningún fotograma clave donde cortar — marca «Cortes exactos» para forzarlo.`);
+  if (heavy) notes.push(`${heavy} pesan más de 16 MB — marca «Cortes exactos» con «Bajar a 720p».`);
+  $('resultsNote').textContent = notes.join(' ');
+
+  $('results').hidden = false;
+  $('dlAll').textContent = NATIVE ? 'Guardar todos en Documentos' : 'Descargar todos';
+  $('dlAll').onclick = async () => {
+    if (!NATIVE){
+      chunks.forEach((c, i) => setTimeout(() => {
+        const a = document.createElement('a');
+        a.href = c.url; a.download = nameFor(i + 1);
+        document.body.appendChild(a); a.click(); a.remove();
+      }, i * 400));
+      return;
+    }
+    const btn = $('dlAll');
+    btn.disabled = true;
+    try {
+      for (let i = 0; i < chunks.length; i++){
+        btn.textContent = `Guardando ${i + 1} de ${chunks.length}…`;
+        await nativeSave(chunks[i].blob, nameFor(i + 1));
+      }
+      btn.textContent = 'Guardados en Documentos/Tijera';
+    } catch (e){ btn.textContent = 'Error al guardar'; console.error(e); }
+    btn.disabled = false;
+  };
+  $('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function nameFor(i){
+  const stem = (file.name.replace(/\.[^.]+$/, '') || 'video').replace(/[^\w\-]+/g, '_').slice(0, 40);
+  return `${stem}_${String(i).padStart(2, '0')}.mp4`;
+}
+
+drawSteps();
+if (NATIVE){
+  document.getElementById('foot').textContent =
+    'Pulsa Compartir y elige WhatsApp → Estado. Publica los trozos en orden, del 1 al último.';
+}
+</script>
+</body>
+</html>
