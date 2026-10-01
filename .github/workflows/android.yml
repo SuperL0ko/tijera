@@ -1,0 +1,53 @@
+name: Construir APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Instalar dependencias
+        run: npm install
+
+      - name: Empaquetar ffmpeg.wasm en www/
+        run: npm run vendor
+
+      - name: Crear el proyecto Android
+        run: npx cap add android
+
+      - name: Permitir más memoria a la app
+        run: |
+          sed -i 's|<application |<application android:largeHeap="true" |' \
+            android/app/src/main/AndroidManifest.xml
+
+      - name: Generar iconos
+        run: npx @capacitor/assets generate --android
+
+      - name: Sincronizar
+        run: npx cap sync android
+
+      - name: Compilar APK de depuración
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tijera-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
